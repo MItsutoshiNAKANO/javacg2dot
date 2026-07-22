@@ -6,15 +6,30 @@ use Carp;
 use English qw(-no_match_vars);
 use Getopt::Std;
 
-our $VERSION = '0.0.1';
+our $VERSION = '0.1.0';
 
 my $help_message = <<"_END_OF_HELP_";
-Usage: $PROGRAM_NAME TARGET.javacg-static.txt ... >TARGET.dot
+Usage: $PROGRAM_NAME [OPTIONS] TARGET.javacg-static.txt ... >TARGET.dot
 Convert Java call graph to Graphviz DOT format.
-
+Options:
+    -f REGEX Specify a filter regex.
+      REGEX is a Perl regular expression to filter the methods to be included
+      in the output.
+      REGEX is applied to both the caller and callee methods, and a method
+      is included in the output if either the caller or callee matches
+      the REGEX.
+      REGEX is applied to the full method name, including the class name and
+      the method signature, in the format of javacg-static output.
+      REGEX is case-sensitive by default, but you can use the (?i) modifier to
+      make it case-insensitive.
+      REGEX style is Perl regular expression syntax, so you can use any valid
+      Perl regex syntax, including character classes, quantifiers, anchors,
+      and so on.
+      REGEX modifiers are /xms by default, so you can use whitespace
+      and comments in your regex, and the dot (.) matches any character.
 example:
     java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static.txt
-    $PROGRAM_NAME TARGET.javacg-static.txt >TARGET.dot
+    $PROGRAM_NAME -f example.package TARGET.javacg-static.txt >TARGET.dot
     dot -Tsvg TARGET.dot -o TARGET.svg
 
 For more details run
@@ -55,6 +70,30 @@ sub parse_call_line {
 sub class_of {
     my ($method) = @_;
     return $method =~ m/\A([^:]+):\S+/xms ? $1 : undef;
+}
+
+##
+# Escape a string for use inside a DOT quoted string.
+# @param[in] $string A string to escape.
+# @return The string, with '"' and '\' backslash-escaped.
+sub escape_dot_string {
+    my ($string) = @_;
+    $string =~ s/(["\\])/\\$1/gxms;
+    return $string;
+}
+
+##
+# Escape a method string for use as a DOT node label.
+# @param[in] $method
+#   A method string in the format of javacg-static output.
+# @return
+#   The method string, escaped for DOT and with its class/method
+#   separator ':' turned into '.'.
+sub escape_method {
+    my ($method) = @_;
+    $method = escape_dot_string($method);
+    $method =~ s/:/./xms;
+    return $method;
 }
 
 ##
@@ -101,8 +140,12 @@ sub record_edge {
 
 ##
 # Load the javacg-static output and build the state.
+# @param[in] $filter_regex
+#   An optional regex to filter the methods to be included in the output.
 # @return A hash reference containing the state of the call graph.
 sub load_javacg_static {
+    my ($filter_regex) = @_;
+
     ##
     # Initialize the state hash with empty structures for
     # edges, classes, callees, callee_classes, callers,
@@ -132,6 +175,10 @@ sub load_javacg_static {
         chomp;
         my ( $caller, $callee ) = parse_call_line($_);
         next if !defined $caller;
+        next
+            if defined $filter_regex
+            && $caller !~ $filter_regex
+            && $callee !~ $filter_regex;
         next if !record_edge( \%state, $caller, $callee );
         record_class_membership( \%state, $caller, $callee );
     }
@@ -173,7 +220,7 @@ sub print_classes {
     } keys %classes;
 
     foreach my $class (@sorted_classes) {
-        $class =~ s/(["\\])/\\$1/gxms;
+        $class = escape_dot_string($class);
         print <<~"_END_OF_SUBGRAPH_HEAD_"
           subgraph "cluster_$class" {
             label = "$class";
@@ -186,9 +233,8 @@ sub print_classes {
                 || $a cmp $b
         } keys %{ $classes{$class} };
         foreach my $method (@sorted_methods) {
-            $method =~ s/(["\\])/\\$1/gxms;
-            $method =~ s/:/./xms;
-            say qq{    "$method" [];}
+            my $escaped = escape_method($method);
+            say q{    "} . $escaped . q{" [];}
                 or croak $OS_ERROR . q{, so couldn't print the method};
         }
         say '  }'
@@ -211,13 +257,13 @@ sub print_edges {
         = sort { keys %{ $edges{$a} } <=> keys %{ $edges{$b} } || $a cmp $b }
         keys %edges;
     foreach my $callee (@sorted_callees) {
-        my $display_callee = $callee;
-        $display_callee =~ s/(["\\])/\\$1/gxms;
-        $display_callee =~ s/:/./xms;
+        my $escaped_callee = escape_method($callee);
         foreach my $caller ( keys %{ $edges{$callee} } ) {
-            $caller =~ s/(["\\])/\\$1/gxms;
-            $caller =~ s/:/./xms;
-            say qq{  "$caller" -> "$display_callee";}
+            my $escaped_caller = escape_method($caller);
+            say q{  "}
+                . $escaped_caller
+                . q{" -> "}
+                . $escaped_callee . q{";}
                 or croak $OS_ERROR . q{, so couldn't print the edge};
         }
     }
@@ -237,9 +283,14 @@ sub print_tail {
 # @return 1 if the script executed successfully, otherwise croak.
 sub main {
     $Getopt::Std::STANDARD_HELP_VERSION = 1;
-    getopts(q{}) or croak $help_message;
+    getopts( 'f:', \my %opts ) or croak $help_message;
+    my $filter_regex;
+    if ( defined $opts{f} ) {
+        eval { $filter_regex = qr/$opts{f}/xms }
+            or croak 'invalid filter regex: ' . $opts{f} . "\n" . $EVAL_ERROR;
+    }
 
-    my $parsed = load_javacg_static();
+    my $parsed = load_javacg_static($filter_regex);
 
     print_head();
     print_classes($parsed);
@@ -261,13 +312,18 @@ javacg2dot - Convert Java call graph to Graphviz DOT format
 
 =head1 SYNOPSIS
 
-    javacg2dot.pl TARGET.javacg-static.txt ... >TARGET.dot
+    javacg2dot.pl [OPTIONS] TARGET.javacg-static.txt ... >TARGET.dot
+    Options:
+        -f REGEX Specify a filter regex.
+        --help Print a brief help message and exit.
+        --version Print the version number and exit.
 
 =head1 USAGE
 
     java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static.txt
-    javacg2dot.pl TARGET.javacg-static.txt >TARGET.dot
-    dot -Tsvg TARGET.dot -o TARGET.svg
+    javacg2dot.pl -f 'some.package' TARGET.javacg-static.txt\
+      >TARGET.dot
+    dot -Tsvg -o TARGET.svg TARGET.dot
 
 =head1 REQUIRED ARGUMENTS
 
@@ -283,6 +339,21 @@ L<java-callgraph|https://github.com/gousiosg/java-callgraph> static.
 =head1 OPTIONS
 
 =over
+
+=item * C<-f REGEX> Specify a filter regex.
+
+REGEX is a Perl regular expression to filter the methods to be included in the
+output.
+REGEX is applied to both the caller and callee methods, and a method is
+included in the output if either the caller or callee matches the REGEX.
+REGEX is applied to the full method name, including the class name and the
+method signature, in the format of javacg-static output.
+REGEX is case-sensitive by default, but you can use the (?i) modifier to make
+it case-insensitive.
+REGEX style is Perl regular expression syntax, so you can use any valid Perl
+regex syntax, including character classes, quantifiers, anchors, and so on.
+REGEX modifiers are /xms by default, so you can use whitespace and comments in
+your regex, and the dot (.) matches any character.
 
 =item * C<--help> Print a brief help message and exit.
 
@@ -319,6 +390,11 @@ the call graph easier to read.
 You specified an unknown option.
 Run the script with C<--help> to see the available options.
 
+=item * C<invalid filter regex:>
+
+You specified an invalid filter regex.
+Run the script with C<--help> to see the correct usage.
+
 =item * C<, so couldn't print>
 
 The script couldn't print due to output error.
@@ -327,7 +403,7 @@ The script couldn't print due to output error.
 
 =head1 EXIT STATUS
 
-The script exits with status 0 on success, and >0 if an error occurs.
+The script exits with status 0 on success, and 1-255 if an error occurs.
 
 =head1 CONFIGURATION
 

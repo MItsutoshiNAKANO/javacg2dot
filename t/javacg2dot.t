@@ -6,6 +6,7 @@ use Carp;
 use English qw(-no_match_vars);
 use Test::More;
 use FindBin;
+use File::Temp qw(tempfile);
 
 my $script = "$FindBin::Bin/../javacg2dot.pl";
 if ( !do $script ) {
@@ -46,6 +47,23 @@ subtest 'class_of' => sub {
     return;
 };
 
+subtest 'escape_method' => sub {
+    is( escape_method('org.example.Foo:bar()'),
+        'org.example.Foo.bar()',
+        'the class/method separator : is turned into .'
+    );
+    is( escape_method(q{org.example.Foo:say("hi")}),
+        q{org.example.Foo.say(\"hi\")},
+        'a double quote is escaped'
+    );
+    is( escape_method('Foo:bar(\)'),
+        'Foo.bar(\\\\)',
+        'a backslash is escaped'
+    );
+
+    return;
+};
+
 subtest 'record_edge' => sub {
     my %state = ( edges => {}, callees => {}, callers => {} );
     is( record_edge( \%state, 'A:a()', 'B:b()' ),
@@ -73,6 +91,28 @@ subtest 'record_class_membership' => sub {
     ok( exists $state{classes}{'org.example.Bar'}
             {'org.example.Bar:helper()'},
         'a callee method is registered under its class'
+    );
+
+    return;
+};
+
+subtest 'load_javacg_static with a filter regex' => sub {
+    my ( $fh, $filename ) = tempfile();
+    print {$fh} <<'_END_OF_FIXTURE_' or die $OS_ERROR;
+M:keep.Caller:foo() (M)other.Callee:bar()
+M:other.Caller:foo() (M)keep.Callee:bar()
+M:other.Caller2:foo() (M)other.Callee2:bar()
+_END_OF_FIXTURE_
+    close $fh or die $OS_ERROR;
+
+    local @ARGV = ($filename);
+    local $ARGV;
+    my $state = load_javacg_static(qr/keep/xms);
+    my @callees = sort keys %{ $state->{edges} };
+    is_deeply(
+        \@callees,
+        [ 'keep.Callee:bar()', 'other.Callee:bar()' ],
+        'an edge is kept if either the caller or the callee matches'
     );
 
     return;
@@ -106,6 +146,40 @@ subtest 'end-to-end: constructors are clustered by class' => sub {
         'a caller whose only call target is java.* is dropped entirely' );
     unlike( $dot, qr{\btrim\b}xms,
         'a call into a java.* package is excluded from the output' );
+
+    return;
+};
+
+subtest 'end-to-end: -f filters edges by caller or callee' => sub {
+    my $fixture = "$FindBin::Bin/init_test.javacg-static.txt";
+    my $dot     = qx{"$^X" "$script" -f "Baz" "$fixture"};
+    is( $CHILD_ERROR, 0, 'the script exits successfully' )
+        or diag($dot);
+
+    like(
+        $dot,
+        qr{"org\.example\.Foo[.]<clinit>[(][)]" \s -> \s
+            "org\.example\.Baz[.]init[(][)]" [;]}xms,
+        'an edge whose callee matches the filter is kept'
+    );
+    unlike( $dot, qr{\bhelper\b}xms,
+        'an edge whose caller and callee both fail to match the filter is dropped'
+    );
+    unlike( $dot, qr{"org\.example\.Foo[.]<init>}xms,
+        'a dropped edge does not register its caller class membership' );
+
+    return;
+};
+
+subtest 'end-to-end: -f rejects an invalid regex' => sub {
+    my $fixture = "$FindBin::Bin/init_test.javacg-static.txt";
+    my $stderr  = qx{"$^X" "$script" -f "(unclosed" "$fixture" 2>&1 1>/dev/null};
+    isnt( $CHILD_ERROR, 0, 'the script exits with an error' );
+    like(
+        $stderr,
+        qr{invalid \s filter \s regex}xms,
+        'the error message names the problem'
+    );
 
     return;
 };

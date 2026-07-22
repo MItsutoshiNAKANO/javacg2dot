@@ -4,13 +4,18 @@ javacg2dot - Convert Java call graph to Graphviz DOT format
 
 # SYNOPSIS
 
-    javacg2dot.pl TARGET.javacg-static.txt ... >TARGET.dot
+    javacg2dot.pl [OPTIONS] TARGET.javacg-static.txt ... >TARGET.dot
+    Options:
+        -f REGEX Specify a filter regex.
+        --help Print a brief help message and exit.
+        --version Print the version number and exit.
 
 # USAGE
 
     java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static.txt
-    javacg2dot.pl TARGET.javacg-static.txt >TARGET.dot
-    dot -Tsvg TARGET.dot -o TARGET.svg
+    javacg2dot.pl -f 'some.package' TARGET.javacg-static.txt\
+      >TARGET.dot
+    dot -Tsvg -o TARGET.svg TARGET.dot
 
 # REQUIRED ARGUMENTS
 
@@ -20,6 +25,21 @@ javacg2dot - Convert Java call graph to Graphviz DOT format
     [java-callgraph](https://github.com/gousiosg/java-callgraph) static.
 
 # OPTIONS
+
+- `-f REGEX` Specify a filter regex.
+
+    REGEX is a Perl regular expression to filter the methods to be included in the
+    output.
+    REGEX is applied to both the caller and callee methods, and a method is
+    included in the output if either the caller or callee matches the REGEX.
+    REGEX is applied to the full method name, including the class name and the
+    method signature, in the format of javacg-static output.
+    REGEX is case-sensitive by default, but you can use the (?i) modifier to make
+    it case-insensitive.
+    REGEX style is Perl regular expression syntax, so you can use any valid Perl
+    regex syntax, including character classes, quantifiers, anchors, and so on.
+    REGEX modifiers are /xms by default, so you can use whitespace and comments in
+    your regex, and the dot (.) matches any character.
 
 - `--help` Print a brief help message and exit.
 - `--version` Print the version number and exit.
@@ -51,13 +71,18 @@ the call graph easier to read.
     You specified an unknown option.
     Run the script with `--help` to see the available options.
 
+- `invalid filter regex:`
+
+    You specified an invalid filter regex.
+    Run the script with `--help` to see the correct usage.
+
 - `, so couldn't print`
 
     The script couldn't print due to output error.
 
 # EXIT STATUS
 
-The script exits with status 0 on success, and >0 if an error occurs.
+The script exits with status 0 on success, and 1-255 if an error occurs.
 
 # CONFIGURATION
 
