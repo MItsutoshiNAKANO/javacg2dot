@@ -6,7 +6,7 @@ use Carp;
 use English qw(-no_match_vars);
 use Getopt::Std;
 
-our $VERSION = '0.1.1';
+our $VERSION = '0.1.2';
 
 my $help_message = <<"_END_OF_HELP_";
 Usage: $PROGRAM_NAME [OPTIONS] TARGET.javacg-static.txt ... >TARGET.dot
@@ -312,7 +312,7 @@ __END__
 
 =head1 NAME
 
-javacg2dot - Convert Java call graph to Graphviz DOT format
+javacg2dot.pl - Convert Java call graph to Graphviz DOT format
 
 =head1 SYNOPSIS
 
