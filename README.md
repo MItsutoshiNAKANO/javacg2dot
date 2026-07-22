@@ -1,6 +1,6 @@
 # NAME
 
-javacg2dot - Convert Java call graph to Graphviz DOT format
+javacg2dot.pl - Convert Java call graph to Graphviz DOT format
 
 # SYNOPSIS
 
