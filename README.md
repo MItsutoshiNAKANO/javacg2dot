@@ -4,7 +4,7 @@ javacg2dot.pl - Convert Java call graph to Graphviz DOT format
 
 # SYNOPSIS
 
-    javacg2dot.pl [OPTIONS] TARGET.javacg-static.txt ... >TARGET.dot
+    javacg2dot.pl [OPTIONS] TARGET.javacg-static ... >TARGET.dot
     Options:
         -f REGEX Specify a filter regex.
         --help Print a brief help message and exit.
@@ -12,14 +12,13 @@ javacg2dot.pl - Convert Java call graph to Graphviz DOT format
 
 # USAGE
 
-    java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static.txt
-    javacg2dot.pl -f 'some.package' TARGET.javacg-static.txt\
-      >TARGET.dot
+    java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static
+    javacg2dot.pl -f 'some.package' TARGET.javacg-static >TARGET.dot
     dot -Tsvg -o TARGET.svg TARGET.dot
 
 # REQUIRED ARGUMENTS
 
-- `TARGET.javacg-static.txt`
+- `TARGET.javacg-static`
 
     Java call graph in the format produced by
     [java-callgraph](https://github.com/gousiosg/java-callgraph) static.

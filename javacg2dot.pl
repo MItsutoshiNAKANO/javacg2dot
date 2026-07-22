@@ -9,7 +9,7 @@ use Getopt::Std;
 our $VERSION = '0.1.2';
 
 my $help_message = <<"_END_OF_HELP_";
-Usage: $PROGRAM_NAME [OPTIONS] TARGET.javacg-static.txt ... >TARGET.dot
+Usage: $PROGRAM_NAME [OPTIONS] TARGET.javacg-static ... >TARGET.dot
 Convert Java call graph to Graphviz DOT format.
 Options:
     -f REGEX Specify a filter regex.
@@ -28,8 +28,8 @@ Options:
       REGEX modifiers are /xms by default, so you can use whitespace
       and comments in your regex, and the dot (.) matches any character.
 example:
-    java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static.txt
-    $PROGRAM_NAME -f example.package TARGET.javacg-static.txt >TARGET.dot
+    java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static
+    $PROGRAM_NAME -f example.package TARGET.javacg-static >TARGET.dot
     dot -Tsvg -o TARGET.svg TARGET.dot
 
 For more details run
@@ -316,7 +316,7 @@ javacg2dot.pl - Convert Java call graph to Graphviz DOT format
 
 =head1 SYNOPSIS
 
-    javacg2dot.pl [OPTIONS] TARGET.javacg-static.txt ... >TARGET.dot
+    javacg2dot.pl [OPTIONS] TARGET.javacg-static ... >TARGET.dot
     Options:
         -f REGEX Specify a filter regex.
         --help Print a brief help message and exit.
@@ -324,16 +324,15 @@ javacg2dot.pl - Convert Java call graph to Graphviz DOT format
 
 =head1 USAGE
 
-    java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static.txt
-    javacg2dot.pl -f 'some.package' TARGET.javacg-static.txt\
-      >TARGET.dot
+    java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static
+    javacg2dot.pl -f 'some.package' TARGET.javacg-static >TARGET.dot
     dot -Tsvg -o TARGET.svg TARGET.dot
 
 =head1 REQUIRED ARGUMENTS
 
 =over
 
-=item * F<TARGET.javacg-static.txt>
+=item * F<TARGET.javacg-static>
 
 Java call graph in the format produced by
 L<java-callgraph|https://github.com/gousiosg/java-callgraph> static.

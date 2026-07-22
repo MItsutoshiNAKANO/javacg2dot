@@ -14,7 +14,7 @@ test:
 clean:
 	rm -f $(TARGETS) $(DOTS)
 
-%.dot: %.javacg-static.txt
+%.dot: %.javacg-static
 	../javacg2dot.pl $< >$@
 %.svg: %.dot
 	dot -Tsvg $< >$@
