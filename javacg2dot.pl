@@ -6,7 +6,7 @@ use Carp;
 use English qw(-no_match_vars);
 use Getopt::Std;
 
-our $VERSION = '0.1.0';
+our $VERSION = '0.1.1';
 
 my $help_message = <<"_END_OF_HELP_";
 Usage: $PROGRAM_NAME [OPTIONS] TARGET.javacg-static.txt ... >TARGET.dot
@@ -30,7 +30,7 @@ Options:
 example:
     java -jar javacg-static.jar TARGET.jar >TARGET.javacg-static.txt
     $PROGRAM_NAME -f example.package TARGET.javacg-static.txt >TARGET.dot
-    dot -Tsvg TARGET.dot -o TARGET.svg
+    dot -Tsvg -o TARGET.svg TARGET.dot
 
 For more details run
     perldoc -F $PROGRAM_NAME
@@ -52,7 +52,7 @@ sub HELP_MESSAGE {
 #   if the line represents a call, otherwise undef.
 sub parse_call_line {
     my ($line) = @_;
-    if ( $line =~ /\A M:(\S+)\s+ [(].[)](\S+)/xms ) {
+    if ( $line =~ /\A M:(\S+:\S+)\s+ [(].[)](\S+:\S+)/xms ) {
         my ( $caller, $callee ) = ( $1, $2 );
         return if $callee =~ m/\Ajavax?[.]/xms;
         return ( $caller, $callee );
@@ -76,7 +76,7 @@ sub class_of {
 # Escape a string for use inside a DOT quoted string.
 # @param[in] $string A string to escape.
 # @return The string, with '"' and '\' backslash-escaped.
-sub escape_dot_string {
+sub escape_string {
     my ($string) = @_;
     $string =~ s/(["\\])/\\$1/gxms;
     return $string;
@@ -87,13 +87,17 @@ sub escape_dot_string {
 # @param[in] $method
 #   A method string in the format of javacg-static output.
 # @return
-#   The method string, escaped for DOT and with its class/method
-#   separator ':' turned into '.'.
+#   A list of two elements:
+#   1. The method string, escaped for DOT.
+#   2. The method name, escaped for DOT.
+#   or undef if the method string is invalid.
 sub escape_method {
     my ($method) = @_;
-    $method = escape_dot_string($method);
-    $method =~ s/:/./xms;
-    return $method;
+    $method = escape_string($method);
+    if ( $method =~ /\A([^:]+):(\S+)/xms ) {
+        return ( $1 . q{.} . $2, $2 );
+    }
+    return;
 }
 
 ##
@@ -220,7 +224,7 @@ sub print_classes {
     } keys %classes;
 
     foreach my $class (@sorted_classes) {
-        $class = escape_dot_string($class);
+        $class = escape_string($class);
         print <<~"_END_OF_SUBGRAPH_HEAD_"
           subgraph "cluster_$class" {
             label = "$class";
@@ -233,8 +237,8 @@ sub print_classes {
                 || $a cmp $b
         } keys %{ $classes{$class} };
         foreach my $method (@sorted_methods) {
-            my $escaped = escape_method($method);
-            say q{    "} . $escaped . q{" [];}
+            my ( $escaped, $shrunk ) = escape_method($method);
+            say q{    "} . $escaped . q{" [label="} . $shrunk . q{"];}
                 or croak $OS_ERROR . q{, so couldn't print the method};
         }
         say '  }'
@@ -257,9 +261,9 @@ sub print_edges {
         = sort { keys %{ $edges{$a} } <=> keys %{ $edges{$b} } || $a cmp $b }
         keys %edges;
     foreach my $callee (@sorted_callees) {
-        my $escaped_callee = escape_method($callee);
+        my ($escaped_callee) = escape_method($callee);
         foreach my $caller ( keys %{ $edges{$callee} } ) {
-            my $escaped_caller = escape_method($caller);
+            my ($escaped_caller) = escape_method($caller);
             say q{  "}
                 . $escaped_caller
                 . q{" -> "}
@@ -381,6 +385,13 @@ callee-side classes and methods toward the bottom. The resulting
 top-to-bottom flow, from callers down to callees, is intended to make
 the call graph easier to read.
 
+Each method is rendered as a node whose DOT identifier is the full
+C<class.method> name, so that edges between methods of the same name
+in different classes stay unambiguous. Since the class is already
+shown by the surrounding subgraph's cluster label, the node's visible
+label is shortened to just the method name, keeping the rendered
+graph less cluttered.
+
 =head1 DIAGNOSTICS
 
 =over
@@ -437,7 +448,7 @@ This script is compatible with Perl 5.26.3 and later.
 
 =head1 BUGS AND LIMITATIONS
 
-The output graph should be more readable/easier to understand.
+Large graphs remain hard to read because they produce too many clusters.
 
 =head1 AUTHOR
 

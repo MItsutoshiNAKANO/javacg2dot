@@ -64,6 +64,13 @@ callee-side classes and methods toward the bottom. The resulting
 top-to-bottom flow, from callers down to callees, is intended to make
 the call graph easier to read.
 
+Each method is rendered as a node whose DOT identifier is the full
+`class.method` name, so that edges between methods of the same name
+in different classes stay unambiguous. Since the class is already
+shown by the surrounding subgraph's cluster label, the node's visible
+label is shortened to just the method name, keeping the rendered
+graph less cluttered.
+
 # DIAGNOSTICS
 
 - `Unknown option:`
@@ -105,7 +112,7 @@ This script is compatible with Perl 5.26.3 and later.
 
 # BUGS AND LIMITATIONS
 
-The output graph should be more readable/easier to understand.
+Large graphs remain hard to read because they produce too many clusters.
 
 # AUTHOR
 

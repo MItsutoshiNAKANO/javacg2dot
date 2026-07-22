@@ -26,6 +26,16 @@ subtest 'parse_call_line' => sub {
     my @unmatched = parse_call_line('this is not a call line');
     is( scalar @unmatched, 0, 'a non-matching line returns nothing' );
 
+    my @no_caller_class
+        = parse_call_line('M:nocolonhere (M)class2:method2()');
+    is( scalar @no_caller_class, 0,
+        'a caller without a class separator : is rejected' );
+
+    my @no_callee_class
+        = parse_call_line('M:class1:method1() (M)nocolonhere');
+    is( scalar @no_callee_class, 0,
+        'a callee without a class separator : is rejected' );
+
     return;
 };
 
@@ -48,18 +58,30 @@ subtest 'class_of' => sub {
 };
 
 subtest 'escape_method' => sub {
-    is( escape_method('org.example.Foo:bar()'),
-        'org.example.Foo.bar()',
-        'the class/method separator : is turned into .'
+    my @result = escape_method('org.example.Foo:bar()');
+    is_deeply(
+        \@result,
+        [ 'org.example.Foo.bar()', 'bar()' ],
+        'returns the dotted class.method label and the bare method name'
     );
-    is( escape_method(q{org.example.Foo:say("hi")}),
-        q{org.example.Foo.say(\"hi\")},
-        'a double quote is escaped'
+
+    my @quoted = escape_method(q{org.example.Foo:say("hi")});
+    is_deeply(
+        \@quoted,
+        [ q{org.example.Foo.say(\"hi\")}, q{say(\"hi\")} ],
+        'a double quote is escaped in both elements'
     );
-    is( escape_method('Foo:bar(\)'),
-        'Foo.bar(\\\\)',
-        'a backslash is escaped'
+
+    my @backslash = escape_method('Foo:bar(\)');
+    is_deeply(
+        \@backslash,
+        [ 'Foo.bar(\\\\)', 'bar(\\\\)' ],
+        'a backslash is escaped in both elements'
     );
+
+    my @invalid = escape_method('no-colon-here');
+    is( scalar @invalid, 0,
+        'a string without a colon returns nothing' );
 
     return;
 };
@@ -133,12 +155,13 @@ subtest 'end-to-end: constructors are clustered by class' => sub {
         or diag($dot);
     like(
         $foo_cluster,
-        qr{"org\.example\.Foo[.]<init>[(]java\.lang\.String[)]" \s [[][]][;]}xms,
+        qr{"org\.example\.Foo[.]<init>[(]java\.lang\.String[)]" \s
+            [[]label="<init>[(]java\.lang\.String[)]"[]][;]}xms,
         'the constructor <init> is inside its class subgraph'
     );
     like(
         $foo_cluster,
-        qr{"org\.example\.Foo[.]<clinit>[(][)]" \s [[][]][;]}xms,
+        qr{"org\.example\.Foo[.]<clinit>[(][)]" \s [[]label="<clinit>[(][)]"[]][;]}xms,
         'the static initializer <clinit> is inside its class subgraph'
     );
 
@@ -170,6 +193,42 @@ subtest 'end-to-end: -f filters edges by caller or callee' => sub {
 
     return;
 };
+
+subtest 'end-to-end: same-named methods stay distinct per class' => sub {
+    my ( $fh, $filename ) = tempfile();
+    print {$fh} <<'_END_OF_FIXTURE_' or die $OS_ERROR;
+M:pkg.A:run() (M)pkg.Target:common()
+M:pkg.B:run() (M)pkg.Target:common()
+_END_OF_FIXTURE_
+    close $fh or die $OS_ERROR;
+
+    my $dot = qx{"$^X" "$script" "$filename"};
+    is( $CHILD_ERROR, 0, 'the script exits successfully' )
+        or diag($dot);
+
+    like(
+        $dot,
+        qr{"pkg\.A[.]run[(][)]" \s -> \s "pkg\.Target[.]common[(][)]" [;]}xms,
+        'the edge from pkg.A.run() is kept distinct'
+    );
+    like(
+        $dot,
+        qr{"pkg\.B[.]run[(][)]" \s -> \s "pkg\.Target[.]common[(][)]" [;]}xms,
+        'the edge from pkg.B.run() is kept distinct'
+    );
+    like(
+        $dot,
+        qr{"pkg\.A[.]run[(][)]" \s [[]label="run[(][)]"[]][;]}xms,
+        'the node for pkg.A.run() is labeled with just the method name'
+    );
+    like(
+        $dot,
+        qr{"pkg\.B[.]run[(][)]" \s [[]label="run[(][)]"[]][;]}xms,
+        'the node for pkg.B.run() is labeled with just the method name'
+    );
+
+    return;
+    };
 
 subtest 'end-to-end: -f rejects an invalid regex' => sub {
     my $fixture = "$FindBin::Bin/init_test.javacg-static.txt";
